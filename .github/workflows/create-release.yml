@@ -1,0 +1,61 @@
+name: Create releases make published.
+
+on:
+    # Launch workflow when main branch is pushed.
+    push:
+        branches: [ "main" ]
+
+    # Launch workflow when manually triggered.
+    workflow_dispatch:
+
+jobs:
+    create-releases:
+        runs-on: ubuntu-latest
+        needs: [build-on-windows]
+        permissions:
+            # "write" permission is required to create a release. (NO NEED to grant at repository settings.)
+            contents: write
+        steps:
+            # Checkout repository.
+          - name: Checkout
+            uses: actions/checkout@v3
+            with:
+                fetch-depth: 1
+            # Download CLI utility.
+          - name: download CLI utility
+            run: |
+                wget "https://github.com/mass10/r-gh-create-release/releases/latest/download/r-gh-create-release"
+                chmod +x r-gh-create-release
+            # Download artifacts.
+          - name: Download artifacts
+            uses: actions/download-artifact@v2
+            with:
+                name: my-tmp-111f2a7b-5f42-48f1-979b-d4b734d166f4
+            # Create release.
+          - name: Create release.
+            run: ./r-gh-create-release --determine-version-from Cargo.toml --file r-diagnose-chrome-profiles.exe
+            env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            # Delete artifacts.
+          - name: Delete artifacts
+            run: |
+                curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" -d "{\"name\":\"artifacts\"}"
+
+    # For Windows
+    build-on-windows:
+        runs-on: windows-latest
+        steps:
+            # Checkout repository.
+          - name: Checkout
+            uses: actions/checkout@v3
+            with:
+                fetch-depth: 1
+            # Build application for Windows.
+          - name: Create the app package
+            run: cargo.exe build --release
+            # Create artifact.
+          - name: Create Release
+            uses: actions/upload-artifact@v3
+            with:
+                name: my-tmp-111f2a7b-5f42-48f1-979b-d4b734d166f4
+                path: target\release\r-diagnose-chrome-profiles.exe
