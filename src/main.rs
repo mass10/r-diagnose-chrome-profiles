@@ -121,12 +121,30 @@ fn read_text_file(path: &str) -> Result<String, std::io::Error> {
 	Ok(text)
 }
 
+#[derive(Debug, serde_derive::Deserialize)]
+struct ProfileEntry {
+	#[allow(unused)]
+	name: String,
+	#[allow(unused)]
+	shortcut_name: String,
+	#[allow(unused)]
+	user_name: String,
+}
+
+#[derive(Debug, serde_derive::Deserialize)]
+struct Profile {
+	info_cache: std::collections::BTreeMap<String, ProfileEntry>,
+}
+
+#[derive(Debug, serde_derive::Deserialize)]
+struct LocalState {
+	profile: Profile,
+}
+
 /// プロファイル名を列挙する
-fn enum_profile_names(text: &str) -> Result<Vec<String>, serde_json::Error> {
-	let v: serde_json::Value = serde_json::from_str(text)?;
-	let profiles = v["profile"]["info_cache"].as_object().unwrap();
-	let result: Vec<String> = profiles.keys().map(|s| s.to_string()).collect();
-	return Ok(result);
+fn parse_local_state_file(text: &str) -> Result<LocalState, serde_json::Error> {
+	let local_state: LocalState = serde_json::from_str(text)?;
+	return Ok(local_state);
 }
 
 fn read_chrome_user_profile(name: &str) -> Result<ChomeUserPreferences, Box<dyn std::error::Error>> {
@@ -134,46 +152,6 @@ fn read_chrome_user_profile(name: &str) -> Result<ChomeUserPreferences, Box<dyn 
 	let text = read_text_file(&preferences_path)?;
 	let v: ChomeUserPreferences = serde_json::from_str(&text)?;
 	return Ok(v);
-}
-
-/// プロファイルをダンプ
-fn diagnose_user_profile(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-	let v = read_chrome_user_profile(name)?;
-	// let v: serde_json::Value = serde_json::from_str(&text)?;
-
-	let profile = v.profile;
-	let profile_name = &profile.name;
-
-	let extensions = &v.extensions.settings;
-
-	println!("😐プロファイル: [{}, {}]", name, profile_name);
-
-	for (key, extension) in extensions {
-		let manifest = &extension.manifest;
-		if manifest.is_none() {
-			continue;
-		}
-		let manifest = manifest.as_ref().unwrap();
-
-		println!("    ▶Extension: [{}]", key);
-		println!("        active_bit: {}", extension.active_bit.safe_value());
-		println!("        first_install_time: {}", extension.first_install_time.safe_value());
-		println!("        from_webstore: {}", extension.from_webstore.safe_value());
-		println!("        last_update_time: {}", extension.last_update_time.safe_value());
-		println!("        manifest:");
-		println!("            description: {}", manifest.description.safe_value());
-		println!("            manifest_version: {}", manifest.manifest_version.safe_value());
-		println!("            name: {}", manifest.name.safe_value());
-		println!("            version: {}", manifest.version.safe_value());
-		println!("            version_name: {}", manifest.version_name.safe_value());
-		println!("        state: {}", extension.state.safe_value());
-		println!("        was_installed_by_default: {}", extension.was_installed_by_default.safe_value());
-		println!("        was_installed_by_oem: {}", extension.was_installed_by_oem.safe_value());
-		println!("        withholding_permissions: {}", extension.withholding_permissions.safe_value());
-		println!();
-	}
-
-	return Ok(());
 }
 
 fn get_profile_dir_path(name: &str) -> String {
@@ -185,31 +163,86 @@ fn get_profile_dir_path(name: &str) -> String {
 	return preferences_path.to_string();
 }
 
-fn enum_chrome_profiles() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+/// Local State ファイルのパスを検出します。
+fn detect_local_state() -> String {
 	let root = std::env::var("LOCALAPPDATA").unwrap_or_default();
-
 	let path = std::path::Path::new(&root).join("Google").join("Chrome").join("User Data").join("Local State");
 	let path = path.to_str().unwrap();
+	return path.to_string();
+}
 
-	let text = read_text_file(path).unwrap();
+/// Google Chrome のプロファイル名を列挙します。
+fn enum_chrome_profiles() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+	// Local State ファイルを読み込み
+	let path = detect_local_state();
+	let text = read_text_file(&path)?;
 
-	let result = enum_profile_names(&text).unwrap();
+	// Local State のパース
+	let local_state = parse_local_state_file(&text)?;
+	
+	// プロファイル名を列挙
+	let profiles = local_state.profile.info_cache;
+	let result: Vec<String> = profiles.keys().map(|s| s.to_string()).collect();
+	
+	return Ok(result);
+}
+
+/// Chrome プロファイルを列挙します。
+fn enum_profiles() -> Result<std::collections::BTreeMap<String, ChomeUserPreferences>, Box<dyn std::error::Error>> {
+	// プロファイルのキーを列挙
+	let profiles = enum_chrome_profiles()?;
+
+	// プロファイルを収集
+	let mut result = std::collections::BTreeMap::new();
+	for name in profiles {
+		let profile = read_chrome_user_profile(&name)?;
+		result.insert(name, profile);
+	}
 
 	return Ok(result);
 }
 
-#[allow(unreachable_code)]
+/// Rust アプリケーションのエントリーポイント
 fn main() {
-	// ENV["LOCALAPPDATA"]
-	let profiles = enum_chrome_profiles();
+	// Chrome のプロファイルを列挙します。
+	let profiles = enum_profiles();
 	if profiles.is_err() {
 		let error = profiles.err().unwrap();
 		eprintln!("{}", error);
 		return;
 	}
 
+	// プロファイルごとにダンプします。
 	let profiles = profiles.unwrap();
-	for name in profiles {
-		diagnose_user_profile(&name).unwrap();
+	for (key, profile) in &profiles {
+		let profile_name = &profile.profile.name;
+
+		println!("😐プロファイル: [{}, {}]", key, profile_name);
+
+		let extensions = &profile.extensions.settings;
+		for (key, extension) in extensions {
+			let manifest = &extension.manifest;
+			if manifest.is_none() {
+				continue;
+			}
+			let manifest = manifest.as_ref().unwrap();
+	
+			println!("    ▶Extension: [{}]", key);
+			println!("        active_bit: {}", extension.active_bit.safe_value());
+			println!("        first_install_time: {}", extension.first_install_time.safe_value());
+			println!("        from_webstore: {}", extension.from_webstore.safe_value());
+			println!("        last_update_time: {}", extension.last_update_time.safe_value());
+			println!("        manifest:");
+			println!("            description: {}", manifest.description.safe_value());
+			println!("            manifest_version: {}", manifest.manifest_version.safe_value());
+			println!("            name: {}", manifest.name.safe_value());
+			println!("            version: {}", manifest.version.safe_value());
+			println!("            version_name: {}", manifest.version_name.safe_value());
+			println!("        state: {}", extension.state.safe_value());
+			println!("        was_installed_by_default: {}", extension.was_installed_by_default.safe_value());
+			println!("        was_installed_by_oem: {}", extension.was_installed_by_oem.safe_value());
+			println!("        withholding_permissions: {}", extension.withholding_permissions.safe_value());
+			println!();
+		}
 	}
 }
