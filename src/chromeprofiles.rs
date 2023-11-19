@@ -114,11 +114,15 @@ fn detect_chrome_profile_file_path(name: &str) -> Result<String, Box<dyn std::er
 
 /// Chrome プロファイルを読み込みます。
 fn read_chrome_profile_file_of(name: &str) -> Result<ChomeUserPreferences, Box<dyn std::error::Error>> {
+	// Preferences ファイルを読み込み
 	let path = detect_chrome_profile_file_path(&name)?;
-	let text = read_text_file(&path)?;
-	let v: ChomeUserPreferences = serde_json::from_str(&text)?;
 
-	return Ok(v);
+	let text = read_text_file(&path)?;
+
+	// Preferences のパース
+	let preferences: ChomeUserPreferences = serde_json::from_str(&text)?;
+
+	return Ok(preferences);
 }
 
 /// Local State ファイルのパスを検出します。
@@ -134,6 +138,7 @@ fn detect_local_state_file_path() -> Result<String, Box<dyn std::error::Error>> 
 fn enum_profile_names() -> Result<Vec<String>, Box<dyn std::error::Error>> {
 	// Local State ファイルを読み込み
 	let path = detect_local_state_file_path()?;
+
 	let text = read_text_file(&path)?;
 
 	// Local State のパース
