@@ -95,34 +95,38 @@ struct LocalState {
 }
 
 /// Chrome プロファイルのルートディレクトリを検出します。
-fn detect_chrome_profile_home() -> Result<String, Box<dyn std::error::Error>> {
+fn detect_chrome_profiles_home_dir() -> Result<String, Box<dyn std::error::Error>> {
 	let path = std::env::var("LOCALAPPDATA").unwrap_or_default();
 	let path = std::path::Path::new(&path).join("Google").join("Chrome").join("User Data");
 	let path = path.to_str().unwrap();
+
 	return Ok(path.to_string());
 }
 
 /// Chrome プロファイルのルートディレクトリを取得します。
-fn get_profile_dir_path(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-	let root = detect_chrome_profile_home()?;
-	let preferences_path = std::path::Path::new(&root).join(name).join("Preferences");
-	let preferences_path = preferences_path.to_str().unwrap();
-	return Ok(preferences_path.to_string());
+fn detect_chrome_profile_file_path(name: &str) -> Result<String, Box<dyn std::error::Error>> {
+	let root = detect_chrome_profiles_home_dir()?;
+	let path = std::path::Path::new(&root).join(name).join("Preferences");
+	let path = path.to_str().unwrap();
+
+	return Ok(path.to_string());
 }
 
 /// Chrome プロファイルを読み込みます。
-fn read_chrome_user_profile(name: &str) -> Result<ChomeUserPreferences, Box<dyn std::error::Error>> {
-	let path = get_profile_dir_path(&name)?;
+fn read_chrome_profile_file_of(name: &str) -> Result<ChomeUserPreferences, Box<dyn std::error::Error>> {
+	let path = detect_chrome_profile_file_path(&name)?;
 	let text = read_text_file(&path)?;
 	let v: ChomeUserPreferences = serde_json::from_str(&text)?;
+
 	return Ok(v);
 }
 
 /// Local State ファイルのパスを検出します。
 fn detect_local_state_file_path() -> Result<String, Box<dyn std::error::Error>> {
-	let root = detect_chrome_profile_home()?;
+	let root = detect_chrome_profiles_home_dir()?;
 	let path = std::path::Path::new(&root).join("Local State");
 	let path = path.to_str().unwrap();
+
 	return Ok(path.to_string());
 }
 
@@ -150,7 +154,7 @@ pub fn configure() -> Result<std::collections::BTreeMap<String, ChomeUserPrefere
 	// プロファイルを収集
 	let mut result = std::collections::BTreeMap::new();
 	for name in profiles {
-		let profile = read_chrome_user_profile(&name)?;
+		let profile = read_chrome_profile_file_of(&name)?;
 		result.insert(name, profile);
 	}
 
