@@ -2,7 +2,8 @@ mod chromeprofiles;
 mod util;
 
 /// Rust アプリケーションのエントリーポイント
-fn diagnose_chrome_profiles() -> Result<(), Box<dyn std::error::Error>> {
+fn diagnose_chrome_profiles(filter: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+	use crate::util::MatchesFilter;
 	use crate::util::SafeValue;
 
 	// Chrome のプロファイルを列挙します。
@@ -11,6 +12,17 @@ fn diagnose_chrome_profiles() -> Result<(), Box<dyn std::error::Error>> {
 	// プロファイルごとにダンプします。
 	for (key, profile) in &profiles {
 		let profile_name = &profile.profile.name;
+
+		// フィルタが指定されていた場合は、そのフィルタに合致しないプロファイルはスキップします。
+		if filter.len() == 0 {
+			// NOP
+		} else if profile_name.matches_one_of(filter) {
+			// NOP
+		} else if key.matches_one_of(filter) {
+			// NOP
+		} else {
+			continue;
+		}
 
 		println!("😐プロファイル: [{}, {}]", key, profile_name);
 
@@ -51,7 +63,9 @@ fn diagnose_chrome_profiles() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Rust アプリケーションのエントリーポイント
 fn main() {
-	let result = diagnose_chrome_profiles();
+	let args: Vec<String> = std::env::args().skip(1).collect();
+
+	let result = diagnose_chrome_profiles(&args);
 	if result.is_err() {
 		let error = result.err().unwrap();
 		eprintln!("{}", error);
