@@ -35,3 +35,19 @@ impl SafeValue<bool> for Option<bool> {
 		}
 	}
 }
+
+pub trait MatchesFilter {
+	fn matches_one_of(&self, right: &Vec<String>) -> bool;
+}
+
+impl MatchesFilter for String {
+	fn matches_one_of(&self, right: &Vec<String>) -> bool {
+		for e in right {
+			if self.contains(e) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
